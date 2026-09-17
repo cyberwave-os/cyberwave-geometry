@@ -298,6 +298,17 @@ TEST(yaw_normalizes_first)
     CHECK_NEAR(from_scaled.value(), from_unit.value(), 1e-12);
 }
 
+TEST(yaw_uses_the_stable_representation_at_gimbal_lock)
+{
+    const Quaternion up = quat::from_rpy(0.3, kPi / 2.0, 1.2);
+    const Quaternion down = quat::from_rpy(0.3, -kPi / 2.0, 1.2);
+    const auto up_yaw = quat::to_yaw(up);
+    const auto down_yaw = quat::to_yaw(down);
+    CHECK(up_yaw.ok() && down_yaw.ok());
+    CHECK_NEAR(up_yaw.value(), 0.9, 1e-12);
+    CHECK_NEAR(down_yaw.value(), 1.5, 1e-12);
+}
+
 // --- rotation matrix --------------------------------------------------------
 
 TEST(matrix_round_trips)

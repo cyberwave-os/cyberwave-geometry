@@ -172,6 +172,12 @@ def _quat_rotate(quat: Tensor, vec: Tensor) -> Tensor:
     # are aligned by inserting point axes into the quaternion, so a (B, 4)
     # rotation applies to (B, P, 3) points -- the case mjlab's quat_apply
     # cannot express and the reason cyberwave-rl grew its own copy.
+    #
+    # The guards came with it. Without them an xyzw quaternion, or a tensor
+    # whose components are not last, reaches torch.linalg.cross and fails
+    # there -- an error naming neither the expected layout nor this function.
+    assert quat.shape[-1] == 4, "quat must have last dim 4 (w, x, y, z)"
+    assert vec.shape[-1] == 3, "vec must have last dim 3 (x, y, z)"
     w = quat[..., 0:1]
     xyz = quat[..., 1:4]
     while xyz.dim() < vec.dim():

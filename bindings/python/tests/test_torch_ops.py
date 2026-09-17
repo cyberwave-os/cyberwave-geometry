@@ -156,6 +156,19 @@ def test_quat_from_matrix_matches_the_scalar_core(golden, device, dtype):
     )
 
 
+@pytest.mark.parametrize("axis", [1, 2, 3])
+def test_quat_from_matrix_preserves_exact_half_turns(axis):
+    """A zero skew term must not erase an exact 180-degree rotation."""
+    q = torch.zeros((1, 4), dtype=torch.float64)
+    q[0, axis] = 1.0
+    matrix = cwt.quat_to_matrix(q)
+    recovered = cwt.quat_from_matrix(matrix)
+
+    assert torch.isfinite(recovered).all()
+    assert torch.allclose(cwt.quat_to_matrix(recovered), matrix, atol=1e-12)
+    assert torch.allclose(recovered.abs(), q.abs(), atol=1e-12)
+
+
 @pytest.mark.parametrize("device", DEVICES)
 def test_quat_from_matrix_handles_exact_half_turns(device):
     """Symmetric 180-degree matrices must keep their axis and remain unit."""
@@ -170,7 +183,9 @@ def test_quat_from_matrix_handles_exact_half_turns(device):
 
     recovered = cwt.quat_from_matrix(matrices)
     assert torch.allclose(
-        recovered.norm(dim=-1), torch.ones(4, device=device, dtype=torch.float64), atol=1e-12
+        recovered.norm(dim=-1),
+        torch.ones(4, device=device, dtype=torch.float64),
+        atol=1e-12,
     )
     assert torch.allclose(cwt.quat_to_matrix(recovered), matrices, atol=1e-12)
 

@@ -14,11 +14,11 @@ has not. The machine-readable version of "what is left" is
 | 1c | WASM binding, built and golden-verified in CI | **done** — not wired into the frontend |
 | 1d | Kotlin/JNI binding | **not started** |
 | 2 | Backend telemetry FK (`services/telemetry/fk.py`) | **blocked** — not on `dev` |
-| 3a | Backend transform / navigation / procedural / sensor / robot-export | **done** — maths migrated; 2 positional-construction findings remain in `robot_export/scene_schema_builder.py` |
-| 3b | `cyberwave-robot-format` | **done** — maths migrated; 10 positional-construction findings remain (`mjcf/parser.py` + test fixtures) |
-| 3c | Python SDK (schema, twin, placement, fusion) | **done** — C++ SDK remains |
+| 3a | Backend transform / navigation / procedural / sensor / robot-export | **done** — 0 findings |
+| 3b | `cyberwave-robot-format` | **done** — 0 findings; `Quaternion` gained `from_wxyz`/`from_xyzw`, so the MJCF seam names its order |
+| 3c | Python SDK (schema, twin, placement, fusion) | **done** — 0 findings; C++ SDK remains |
 | 3d | `cyberwave-ml`, simulator, CLIs, demos, e2e | **done** — 0 findings |
-| 3e | Edge nodes, edge runtime, cloud nodes | **blocked** — see below |
+| 3e | Edge nodes and cloud nodes | **blocked** — see below. Edge *runtime* is done (0 findings) |
 | 4 | Frontend | **not started** — WASM exists; wiring and payload call still open |
 | 5 | C++ SDK and Kotlin call sites | **blocked** — see below |
 | 3f | Geodetic (`geo_transform.py`, `geo-transform.ts`, Kotlin `offsetWgs84`) | **not started** — module landed, see below |
@@ -54,14 +54,12 @@ have to invent them:
 
 ### What the checker says
 
-Down from 304 findings across 113 files to **154**. `cyberwave-ml`,
-`cyberwave-sim`, the CLIs, `cyberwave-rl`, `cyberwave-demos` and `e2e` are all
-at zero; `cyberwave-backend` and `cyberwave-robot-format` have no hand-written
-maths left as findings, only positional quaternion construction -- plus one
-exempted copy, the temporary singular-rotation guard in the backend's
-`schema_joint_geometry.py`, which goes when the deployed robot-format floor
-reaches the wheel carrying the fixed `Quaternion.to_rpy` (CYB-3869). The
-baseline in `scripts/geometry_duplication_baseline.json` carries a per-component
+Down from 304 findings across 113 files to **58**. `cyberwave-backend`,
+`cyberwave-robot-format`, the Python SDK, `cyberwave-edge-runtime`,
+`cyberwave-ml`, `cyberwave-sim`, the CLIs, `cyberwave-rl`, `cyberwave-demos`
+and `e2e` are all at zero. Everything that remains is blocked on packaging or
+on a build that does not exist yet, not on someone getting to it. The baseline in
+`scripts/geometry_duplication_baseline.json` carries a per-component
 `migration_plan` with a removal target for everything that remains, and the
 checker recomputes its counts from the entry list on every `--write-baseline`,
 so the plan cannot drift from the list it describes. Rather than trusting the
@@ -71,24 +69,30 @@ What is left, and why each is blocked rather than merely undone:
 
 | Component | Findings | Blocker |
 | --------- | -------- | ------- |
-| `cyberwave-edge-nodes` | 68 | Deployed to devices from published wheels; no aarch64 wheel exists yet |
-| `cyberwave-edge-runtime` | 42 | Same |
+| `cyberwave-edge-nodes` | 42 | Jazzy and refactor-only trees whose Docker build contexts exclude `common/geometry`, plus Android/Kotlin WIP and immutable tests; no aarch64 wheel exists yet |
 | `cyberwave-sdks/cyberwave-cpp` | 7 | Would add a link dependency to the SDK's `install(EXPORT)` contract, which downstream consumers resolve via `find_package` — and the core is not published or open-sourced, so the mirror could not build |
-| `cyberwave-sdks/cyberwave-python` | 16 | 10 are positional `Quaternion(...)` construction rather than maths (8 `test_data_fusion.py` fixtures to exempt, 2 call sites to convert); the other 6 are real maths in `calibration/frames.py` and its test, which arrived from `dev` — see the baseline's note for what has to be checked before `to_matrix`/`from_matrix` can take it over |
-| `cyberwave-robot-format` | 10 | Same shape: `mjcf/parser.py` plus test fixtures. The maths is migrated |
 | `cyberwave-frontend` | 6 | Needs the WASM module wired into the Next.js build; weigh the ~140KB payload against six findings first |
 | `cyberwave-cloud-nodes` | 3 | Ships as a deployed node depending on published wheels |
-| `cyberwave-backend` | 2 | Positional construction in `robot_export/scene_schema_builder.py` |
 
-That is 154, matching `entries` in the baseline; the `migration_plan` beside
+That is 58, matching `entries` in the baseline; the `migration_plan` beside
 it is recomputed from the same list, so those two agree by construction rather
 than by transcription. This table is still transcribed by hand, so treat it as
 a snapshot and let the checker settle any disagreement.
 
-Every one of these is the same underlying problem: **the core is published to
-no index**. Declaring it anywhere that installs from an index fails outright —
-that is what broke five CI checks once already. Publishing the wheels unblocks
-four of the five rows at a stroke.
+Two of those four rows — `cyberwave-edge-nodes` and `cyberwave-cloud-nodes`,
+45 of the 58 findings — are the same underlying problem: **the core is
+published to no index**. Declaring it anywhere that installs from an index
+fails outright; that is what broke five CI checks once already. Publishing the
+wheels unblocks both at a stroke. The other two rows do not depend on it: the
+frontend needs the WASM module wired into the Next.js build, and the C++ SDK
+needs a build it does not currently have.
+
+The `positional-quaternion-construction` rule is now at **zero repo-wide**.
+That was the class the baseline called latent rather than wrong — correct
+today because every one of those classes is xyzw on both sides, and a real bug
+the moment any of them gains a second order. There is nothing left to trip
+over: every remaining entry is hand-written maths, not a component-order
+gamble.
 
 The count is not monotonic, and should not be read as one: it grew by 30 when
 the checker gained rules for slerp weights and for re-declared operations.
@@ -96,15 +100,25 @@ Those were always there. A checker finding more is progress, not regression —
 which is why `--write-baseline` refuses to add entries unless you pass
 `--accept-new` and say why.
 
-It also grows on a merge, for as long as this gate lives on a branch and not on
-`dev`. Merging `dev` brought 25 findings written while nothing was checking:
-`cyberwave-edge-runtime`'s new intelligence services and the SDK's
-`calibration/frames.py` went into the baseline with `--accept-new`, and the ten
-that were deliberate — three test helpers that must not call the code they pin,
-and the temporary singular-rotation guard in the backend's
-`schema_joint_geometry.py` — took a `geometry-core-exempt` comment instead. The
-same 16 that left were `dev` deleting the legacy Go2 runtimes. Landing the gate
-on `dev` is what stops this recurring.
+A merge is the other way it grows, for as long as this gate lives on a branch
+and not on `dev`: code written while nothing was checking arrives already
+duplicated. The last such merge brought 12 findings and the baseline still came
+out at 58, because each was resolved rather than parked:
+
+- Migrated: the nav2 waypoint mission node's yaw extraction and heading
+  construction, the rtabmap apriltag localizer's two yaw extractions and its
+  test's rotation fixture, and the Python SDK's `quat_wxyz_to_matrix`.
+- Exempted, each for a reason that is a property of the code and not a
+  scheduling excuse: `cyberwave_map_bundle.fiducial_seed`, whose package is a
+  stdlib-only domain model with a test enforcing exactly that, so calling a
+  ctypes binding from it is the coupling the test exists to prevent; the SDK's
+  `matrix_to_quat_wxyz`, because the core's `from_matrix` rejects matrices that
+  are not orthonormal within 1e-6 and this one reads OpenCV hand-eye output that
+  drifts further; and the SDK test's reference implementations, which have to
+  stay independent of the core they check.
+
+Prefer migrating. An exemption is a claim about the code that the next reader
+will hold you to, so write the reason, not the intention.
 
 **The checker is not proof that all quaternion maths is gone.** It matches
 formulas and declarations it knows about. Anything expressed differently — a

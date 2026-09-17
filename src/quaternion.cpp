@@ -347,9 +347,12 @@ Result<double> to_yaw(const Quaternion& q)
     const Quaternion u = unit.value();
 
     // Same gimbal-lock branch as to_rpy, on the same quantity: at pitch =
-    // +/- pi/2 the atan2 below splits the rotation between roll and yaw
-    // arbitrarily, and to_yaw(q) has to equal to_rpy(q).yaw everywhere -- which
-    // includes agreeing on where the pole starts.
+    // +/- pi/2 the planar yaw numerator and denominator both collapse toward
+    // zero, so the atan2 below splits the rotation between roll and yaw in a
+    // way that is platform/compiler-sensitive. Use the same canonical pole
+    // representation as to_rpy instead -- roll zero, the whole remaining
+    // rotation in yaw -- since to_yaw(q) has to equal to_rpy(q).yaw everywhere,
+    // which includes agreeing on where the pole starts.
     const double r00 = 1.0 - 2.0 * (u.y * u.y + u.z * u.z);
     const double r10 = 2.0 * (u.w * u.z + u.x * u.y);
     if (std::hypot(r00, r10) < kMinCosPitch)

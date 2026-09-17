@@ -56,7 +56,15 @@ def coerce_vector(value: Any, default: Vector3 | None = None) -> Vector3:
             _number(value.get("z"), fallback.z),
         )
     if isinstance(value, list | tuple) and len(value) == 3:
-        return Vector3(_number(value[0]), _number(value[1]), _number(value[2]))
+        # Per-component fallback, same as the dict branch above. Passing no
+        # default here made an unparseable component silently read 0.0 while
+        # its siblings honoured the caller's default, so a partly-corrupt
+        # sequence came back as a mix of the two -- worse than either.
+        return Vector3(
+            _number(value[0], fallback.x),
+            _number(value[1], fallback.y),
+            _number(value[2], fallback.z),
+        )
     return fallback
 
 
