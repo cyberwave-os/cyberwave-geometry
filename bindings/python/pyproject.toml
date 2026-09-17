@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyberwave-geometry"
+version = "0.2.0"
+description = "Python binding for the Cyberwave shared geometry core (quaternions, transforms, forward kinematics)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+dependencies = []
+
+[project.optional-dependencies]
+# Batched kernels for RL rollouts and anything else that works a whole tensor
+# of poses at a time. Unpinned on purpose: a CUDA build is chosen by the
+# consumer's index (download.pytorch.org/whl/cu121 and friends), and pinning a
+# build here would fight that.
+torch = ["torch>=2.0"]
+test = ["pytest>=7"]
+
+[tool.setuptools]
+packages = ["cyberwave_geometry"]
+
+[tool.setuptools.package-data]
+# A built wheel carries the shared core beside the package; a source checkout
+# finds it through CYBERWAVE_GEOMETRY_LIBRARY or a developer build tree.
+#
+# `py.typed` (PEP 561) ships the annotations that are already written
+# throughout this package. Without it mypy reports `import-untyped` at every
+# consumer -- 15 files in cyberwave-backend alone -- and the alternative is a
+# `# type: ignore` on each import, which suppresses real errors too.
+cyberwave_geometry = ["*.so", "*.dylib", "*.dll", "_lib/*", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Mirrors cyberwave-backend/pyproject.toml so the same `ruff` invocation is
+# right in both trees. Scoped here rather than at the repo root because this
+# package is standalone and installable on its own.
+[tool.ruff]
+indent-width = 4
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "I", "UP", "B", "C4", "SIM", "Q", "PT", "RUF"]
+ignore = [
+    "E501",   # line length, handled by the formatter
+    "RUF012", # ClassVar annotations, noisy for the ctypes signature tables
+]

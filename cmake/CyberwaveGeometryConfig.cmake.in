@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+# The core is dependency-free, so there is nothing to find_dependency() here --
+# that is the point of the library and a reason to be suspicious of any future
+# edit that adds one.
+include("${CMAKE_CURRENT_LIST_DIR}/CyberwaveGeometryTargets.cmake")
+
+check_required_components(CyberwaveGeometry)

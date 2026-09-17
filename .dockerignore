@@ -1,0 +1,23 @@
+# The geometry core is COPY'd into several images as a named build context
+# (`--build-context cyberwave-geometry=common/geometry`). A CMake build tree
+# from a developer's machine must never travel with it: its CMakeCache.txt
+# records absolute host paths, and CMake refuses to configure against a cache
+# written for a different source directory. That failure is confusing and
+# machine-dependent, so it is excluded here rather than left to chance.
+#
+# .gitignore already covers these for commits; this file covers image builds,
+# which do not consult .gitignore.
+**/build/
+**/_build/
+**/*.egg-info/
+**/dist/
+**/__pycache__/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+*.so
+*.so.*
+*.dylib
+*.dll
+*.o
+*.a
