@@ -1,5 +1,12 @@
 [build-system]
-requires = ["setuptools>=68"]
+# cmake is a real build dependency: setup.py shells out to it to compile the
+# core. It has to be declared here rather than installed alongside the build,
+# because PEP 517 builds in an isolated environment -- a cmake installed
+# outside it leaves its console script on PATH while its module is unimportable
+# from the build interpreter, which fails as "No module named 'cmake'" rather
+# than as anything about cmake being missing. 3.14 is the floor the core's own
+# CMakeLists declares.
+requires = ["setuptools>=68", "cmake>=3.14"]
 build-backend = "setuptools.build_meta"
 
 [project]
