@@ -121,12 +121,21 @@ cd common/geometry/bindings/python && python -m pytest
 
 ### Publishing the Python wheel
 
-The package is **not on PyPI**. Prereleases go to the internal Buildkite
-registry (`cyberwave-internal-python`), built by the `prerelease-wheels` and
+Prereleases go to the internal Buildkite registry
+(`cyberwave-internal-python`) from the `prerelease-wheels` and
 `publish-prerelease-wheels` jobs in
 [`geometry-core.yml`](../../.github/workflows/geometry-core.yml): a push to
 `dev` or `staging` that touches `common/geometry/**`, or a manual
-`workflow_dispatch`.
+`workflow_dispatch`. A push to `production` subtree-pushes this tree to
+[cyberwave-os/cyberwave-geometry](https://github.com/cyberwave-os/cyberwave-geometry)
+and tags `v<version>` from `bindings/python/pyproject.toml`, the same way
+`cyberwave-robot-format` and `cyberwave-edge-core` publish. That tag runs
+[`.github/workflows/release-pypi.yml`](.github/workflows/release-pypi.yml) in
+the public repo, which builds the same wheel matrix and uploads it to
+[PyPI](https://pypi.org/project/cyberwave-geometry/). Wheels only: an sdist of
+`bindings/python` cannot build, because it does not carry the core. PyPI will
+not replace an existing file, so bump the version before the next production
+push or the tag already exists and nothing is released.
 
 Two things make this more than `python -m build`:
 
@@ -134,10 +143,12 @@ Two things make this more than `python -m build`:
   `linux_x86_64`, and pip will not install that tag from an index. The build
   runs inside `quay.io/pypa/manylinux_2_28_*` and finishes with `auditwheel
   repair`, via
-  [`build_geometry_manylinux_wheels.sh`](../../.github/scripts/build_geometry_manylinux_wheels.sh).
-* **`cibuildwheel` does not fit.** It copies only the package directory into
-  its build container, and this package cannot build from `bindings/python`
-  alone — `setup.py` compiles the core from `common/geometry`, two levels up.
+  [`build_manylinux_wheels.sh`](.github/scripts/build_manylinux_wheels.sh).
+* **`cibuildwheel` does not fit the Linux job.** It copies only the package
+  directory into its build container, and this package cannot build from
+  `bindings/python` alone — `setup.py` compiles the core from
+  `common/geometry`, two levels up. macOS and Windows have no container, so
+  those jobs use cibuildwheel in place on the runner.
   The script mounts the whole repo instead, which is also why it builds from a
   copy: setuptools writes `egg-info` beside `setup.py`, and a developer's stale
   `build/` tree would otherwise hand CMake a cache generated for another path.
@@ -148,13 +159,17 @@ also stamps the ABI, so the wheels are `cp3XX`-specific even though the binding
 is pure ctypes.
 
 **Versioning gotcha:** the computed dev version is `<base>.devN`, which is
-*lower* than `<base>` under PEP 440 and so does **not** satisfy the
-`cyberwave-geometry>=0.1.1,<0.2.0` pin its consumers declare. Cutting a version
-those pins accept means either passing an explicit `version` to the
-`workflow_dispatch`, or bumping the base version in `pyproject.toml` first.
+*lower* than `<base>` under PEP 440 and so does **not** satisfy a pin on the
+base version. A push to `production` tags that base version on the public repo.
+Cutting a version the pins accept on Buildkite before then means passing an
+explicit `version` to the `workflow_dispatch`, or bumping the base version in
+`pyproject.toml` first.
 
-There are no macOS wheels yet. A Mac resolves the dependency by building from
-the checkout — `.github/actions/setup-geometry-core`, or
+Linux wheels come from the manylinux container. macOS (arm64 and x86_64) and
+Windows wheels come from the `prerelease-wheels-native` cibuildwheel jobs,
+which build in place on the runner because this package cannot build from
+`bindings/python` alone. A platform with no wheel still builds from the
+checkout — `.github/actions/setup-geometry-core`, or
 `.github/scripts/install_sdk.sh`, both of which install it before the SDK so
 pip never reaches for an index.
 
