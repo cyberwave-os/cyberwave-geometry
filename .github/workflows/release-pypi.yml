@@ -103,14 +103,14 @@ jobs:
           python-version: "3.11"
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v3.4.1
         with:
           package-dir: bindings/python
           output-dir: wheelhouse
         env:
-          # The same four interpreters PYTHONS covers in
+          # The same five interpreters PYTHONS covers in
           # .github/scripts/build_manylinux_wheels.sh.
-          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-*"
+          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "*-win32 *_i686"
           CIBW_ARCHS: ${{ matrix.target.cibw_archs }}
           CIBW_BUILD_VERBOSITY: 1

@@ -48,7 +48,7 @@ mkdir -p "$CORE"
 tar -C "$SRC" --exclude=build --exclude='*.egg-info' -cf - . | tar -C "$CORE" -xf -
 
 OUT=${OUT:-/out}
-PYTHONS=${PYTHONS:-"cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313"}
+PYTHONS=${PYTHONS:-"cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314"}
 
 # cmake is not guaranteed in the manylinux image; take it from pip so the
 # version comes from the image's Python rather than the base OS.
@@ -56,7 +56,7 @@ export PATH="/opt/python/cp312-cp312/bin:$PATH"
 pip install --no-cache-dir --quiet cmake ninja
 
 # Build the core once and hand it to every per-Python wheel build, rather than
-# recompiling it four times.
+# recompiling it once per interpreter.
 cmake -S "$CORE" -B /tmp/geometry-build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCYBERWAVE_GEOMETRY_BUILD_TESTS=OFF \
