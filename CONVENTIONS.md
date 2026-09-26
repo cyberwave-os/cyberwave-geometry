@@ -18,11 +18,11 @@ ROS, Eigen, Three.js and MuJoCo. It does **not** match the JPL convention some
 IMU vendors ship, where the product order is reversed.
 
 Components are always reached by name — `x`, `y`, `z`, `w` — never by position.
-This is not stylistic. The monorepo speaks both orders:
+This is not stylistic. The surrounding ecosystem speaks both orders:
 
 | Order  | Used by                                                          |
 | ------ | ---------------------------------------------------------------- |
-| `xyzw` | protobuf (`common/protobuf`), ROS, Three.js                       |
+| `xyzw` | protobuf, ROS, Three.js                                          |
 | `wxyz` | MuJoCo, the legacy Cyberwave backend payloads, `quaternion_wxyz`  |
 
 A bare four-element array is ambiguous between them, and reading one as the
@@ -56,22 +56,18 @@ the conversion is now spelled out where it happens instead of being implied by
 which file you are reading.
 
 Two of those orders are not ours to choose. MuJoCo hands out `data.xquat` as
-`wxyz`, so every simulator-facing surface in `cyberwave-sim`, `cyberwave-rl` and
-`cyberwave-demos` is `wxyz` by definition — converting at that seam is the only
-move available. "`xyzw` everywhere" is therefore not a reachable end state; the
+`wxyz`, so every simulator-facing surface is `wxyz` by definition — converting
+at that seam is the only move available. "`xyzw` everywhere" is therefore not a reachable end state; the
 reachable one is **`xyzw` inside Cyberwave, `wxyz` quarantined behind named
 adapters at the simulator and legacy-payload seams.**
 
 Where a wire order is genuinely ours but cannot flip yet, name it once and route
 every read and write through that name, so the flip is a one-line change rather
-than an audit. The navigate command does this: its scalar-first order lives in
-`NAVIGATE_WIRE_QUAT_ORDER`
-(`cyberwave-backend/src/app/services/control/navigation/geometry.py`), and both
-the resolver and the workflow code emitter go through
-`quat_from_navigate_wire` / `quat_to_navigate_wire`. Flipping it remains a wire
-break — deployed edge drivers parse `[w, x, y, z]` off `twin/{uuid}/navigate/cmd`
-— so it needs a payload-version bump and a dual-read window. Centralising the
-order is the prerequisite for that, not a substitute for it.
+than an audit: a single `..._WIRE_QUAT_ORDER` constant with a matching pair of
+`..._from_wire` / `..._to_wire` helpers, and no positional reads anywhere else.
+Centralising the order does not *make* the flip safe — deployed devices are
+already parsing the old layout, so it still needs a payload-version bump and a
+dual-read window. It is the prerequisite for that, not a substitute for it.
 
 ---
 
@@ -84,18 +80,16 @@ q = qz(yaw) · qy(pitch) · qx(roll)
 ```
 
 which is **fixed-axis (extrinsic) XYZ**, equivalently **intrinsic Z-Y-X**. This
-is the URDF and ROS convention, and it is what
-`cyberwave_robot_format.math_utils.Quaternion.from_rpy` and
-`cyberwave.schema.Quaternion.from_rpy` already implement — the core matches
-those bit for bit, so swapping a call site over changes nothing numerically.
+is the URDF and ROS convention, so a call site already using a URDF-compatible
+`from_rpy` can swap to the core with no numerical change at all.
 
 ⚠️ **Three.js defaults to intrinsic `"XYZ"`**, which is a *different* rotation
-for the same three angles. `cyberwave-frontend/lib/utils/rotation.ts` calls
-`new THREE.Euler().setFromQuaternion(quat, "XYZ")`. That is correct for what it
-does — it drives a Three.js scene graph — but the numbers it produces are not
-URDF roll/pitch/yaw and must not be persisted as such. When a frontend value
-crosses into stored geometry, convert through the quaternion, never by copying
-the three angles across.
+for the same three angles. A renderer calling
+`new THREE.Euler().setFromQuaternion(quat, "XYZ")` is correct for what it does —
+it drives a Three.js scene graph — but the numbers it produces are not URDF
+roll/pitch/yaw and must not be persisted as such. When a rendering value crosses
+into stored geometry, convert through the quaternion, never by copying the three
+angles across.
 
 At **gimbal lock** (pitch = ±π/2) roll and yaw are the same degree of freedom.
 `to_rpy` attributes the whole rotation to yaw and reports roll as zero. The
@@ -176,12 +170,10 @@ as identity persists a confidently wrong orientation — far worse than an
 honestly missing frame.
 
 **Compatibility adapters may still be lenient**, and several must be. The
-clearest example is already written into the wire contract:
-`common/protobuf/v0/cyberwave/mqtt/twin/rotation.proto` says an all-zero
-quaternion "is treated as identity [w=1] by consumers that need a valid
-rotation". That is a parsing boundary doing exactly what the core refuses to
-do, and correctly so — a proto3 field that was never set arrives as all zeros
-and means "absent", not "degenerate".
+clearest example is proto3: a rotation field that was never set arrives as an
+all-zero quaternion, and a wire contract may well specify that consumers treat
+it as identity. That is a parsing boundary doing exactly what the core refuses
+to do, and correctly so — all zeros there means "absent", not "degenerate".
 
 Behaviour like that is preserved in `cyberwave_geometry.compat`, where it is
 named and greppable, rather than buried in the arithmetic:
@@ -232,9 +224,9 @@ query is the already-world-resolved pose of the tree's base frame — the caller
 applies the environment's navigation anchor *before* calling, which keeps FK a
 pure function of the description and the joint state.
 
-Cyberwave environments and the navigation frame are both **Z-up**; see
-`cyberwave-backend/src/lib/transform_utils.py` for the anchor transform itself,
-which is a separate concern from this library.
+Cyberwave environments and the navigation frame are both **Z-up**. Resolving an
+environment's navigation anchor into that base transform is the caller's job and
+a separate concern from this library.
 
 The one exception to both halves of that — the units and the
 frame-agnosticism — is §9. A latitude is not a number the core can compose
@@ -300,9 +292,8 @@ the one counter-intuitive consequence of an ENU-referenced pose, and
 ENU is defined by the ellipsoid normal at a point, so the same quaternion
 100 km away is a different attitude. Assembling a `GeoPose` from two
 separately-timestamped messages therefore produces a pose that was never real.
-The wire contract already says this for camera exposure poses
-(`CameraGeodeticPosePayload` in `cyberwave-backend/src/lib/mqtt_schemas.py`);
-the type is where it stops being a comment.
+A wire contract can say this — a payload carrying position and orientation as
+one message, at one timestamp — but the type is where it stops being a comment.
 
 ### Degrees, and why this one rule is broken on purpose
 
@@ -421,11 +412,13 @@ from a measured one.
 
 ### What this replaces
 
-`cyberwave-backend/src/lib/geo_transform.py` and
-`cyberwave-frontend/lib/utils/geo-transform.ts` are the same arithmetic written
-twice, kept in agreement by a "Keep in sync with" comment at the top of each —
-the exact duplication this library exists to remove. The core reproduces both to
-within 1e-13 m at site ranges, so migrating them is a call-site change, not a
-behaviour change. A third copy, `offsetWgs84` in the Android driver's
-`CameraPoseTransform.kt`, uses the spherical constant and is the one that will
-move measurably (by its documented 0.67%).
+This module exists because the same tangent-plane arithmetic tends to be written
+once per language and then kept in agreement by a "keep in sync with" comment —
+the exact duplication this library removes. Two such copies agreed with the core
+to within 1e-13 m at site ranges, so replacing them was a call-site change, not a
+behaviour change.
+
+A copy that uses the **spherical** earth radius instead of the ellipsoid does
+not: it differs by roughly +0.67%/-0.29% of the offset, which at a hundred
+metres is most of a metre. Migrating one of those moves published positions and
+should be treated as a behaviour change, not a refactor.

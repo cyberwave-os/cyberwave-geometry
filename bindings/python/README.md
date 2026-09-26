@@ -1,8 +1,7 @@
 # `cyberwave-geometry` (Python)
 
-**Internal document.**
-
-Python binding for the [Cyberwave shared geometry core](../../README.md). It
+Python binding for the [Cyberwave geometry core](https://github.com/cyberwave-os/cyberwave-geometry).
+It
 holds **no formulas of its own** — every function here marshals to the C++
 library and back. Adding arithmetic to this package would recreate exactly the
 duplication the core exists to remove.
@@ -10,22 +9,28 @@ duplication the core exists to remove.
 ## Install
 
 ```bash
-pip install -e common/geometry/bindings/python
+pip install cyberwave-geometry
 ```
 
-The package needs `libcyberwave_geometry_c.so` (`.dylib` / `.dll`) at import
-time. It looks, in order:
+The wheel carries `libcyberwave_geometry_c` beside the package, so a normal
+install needs no compiler and no separate build. Wheels are published for
+CPython 3.10-3.14 on manylinux `x86_64`/`aarch64`, macOS `arm64`/`x86_64` and
+Windows `AMD64`; there is no sdist, because this package compiles the core from
+the repository root and cannot build from `bindings/python` alone.
+
+At import time the package looks for the library, in order:
 
 1. `$CYBERWAVE_GEOMETRY_LIBRARY` — an explicit path;
 2. beside the package, or in `cyberwave_geometry/_lib/` — how a built wheel ships;
 3. `$CYBERWAVE_GEOMETRY_BUILD_DIR` — a developer's CMake build tree;
 4. the platform loader's own search path.
 
-For local development:
+For local development, from a checkout of the repository:
 
 ```bash
-cmake -S common/geometry -B build/geometry && cmake --build build/geometry -j
-export CYBERWAVE_GEOMETRY_LIBRARY=$PWD/build/geometry/libcyberwave_geometry_c.so
+cmake -S . -B build && cmake --build build -j
+export CYBERWAVE_GEOMETRY_LIBRARY=$PWD/build/libcyberwave_geometry_c.so
+pip install -e ./bindings/python
 ```
 
 If it cannot find the library the `ImportError` prints every path it tried.
@@ -101,7 +106,8 @@ Two traps the adapters exist to prevent: feeding NED angles straight into
 `quat.from_rpy` is right at 45 degrees and 90 degrees wrong at every cardinal
 heading, and NED positive pitch is nose-up where ENU/FLU positive pitch is
 nose-down. The full convention is
-[`CONVENTIONS.md`](../../CONVENTIONS.md) section 9.
+[`CONVENTIONS.md`](https://github.com/cyberwave-os/cyberwave-geometry/blob/main/CONVENTIONS.md)
+section 9.
 
 ## Strict by default
 
@@ -147,21 +153,19 @@ converters above rather than relying on that.
 
 ## Why ctypes and not a compiled extension
 
-`pip install` keeps working on every platform with no wheel matrix and no
-compiler, which is what makes migrating the backend, the SDK and the edge nodes
-onto the core tractable at all. The C ABI is the seam a compiled accelerator
-would slot into later without changing anything above `_native.py`. See
-[`../../docs/MIGRATION.md`](../../docs/MIGRATION.md) for the packaging decision
-that still has to be made before the SDK can depend on this.
+There are no formulas on this side at all -- every function marshals to the C++
+core and back -- so a compiled extension would buy nothing but build complexity.
+The C ABI is the seam a compiled accelerator would slot into later without
+changing anything above `_native.py`.
 
 ## Tests
 
 ```bash
-cd common/geometry/bindings/python && python -m pytest
+cd bindings/python && python -m pytest
 ```
 
 `tests/test_golden.py` runs the shared
-[golden vectors](../../golden/geometry_golden.json) — the same file the C++
+[golden vectors](https://github.com/cyberwave-os/cyberwave-geometry/blob/main/golden/geometry_golden.json) — the same file the C++
 runner reads, which is what makes "C++ and Python agree" a tested claim.
 `tests/test_binding.py` covers what only exists on this side: handle lifetimes,
 the strict/lenient split, and the named-component discipline.

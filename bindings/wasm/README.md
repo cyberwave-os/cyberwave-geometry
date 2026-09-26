@@ -1,9 +1,7 @@
 # WASM binding
 
-**Internal document.**
-
-The Emscripten SDK is not part of this repo's toolchain, so the build runs in the
-official image. From `common/geometry`:
+The Emscripten SDK is not part of this repository's toolchain, so the build runs
+in the official image. From the repository root:
 
 ```bash
 docker run --rm -v "$PWD":/src -w /src emscripten/emsdk:3.1.64 \

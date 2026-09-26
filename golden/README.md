@@ -48,8 +48,8 @@ input is covered by each language's own unit tests instead — `test_quaternion.
 ## Regenerating
 
 ```bash
-cmake --build build/geometry --target golden_gen
-build/geometry/tests/golden_gen --write common/geometry/golden/geometry_golden.json
+cmake --build build --target golden_gen
+build/tests/golden_gen --write golden/geometry_golden.json
 ```
 
 Only after an *intentional* behaviour change, and read the diff before
