@@ -70,8 +70,11 @@ __all__ = [
     "normalize",
     "quat_apply",
     "quat_conjugate",
+    "quat_from_axis_angle",
+    "quat_from_euler_xyz",
     "quat_from_matrix",
     "quat_from_z_direction",
+    "quat_inv",
     "quat_mul",
     "quat_normalize",
     "quat_rotate",
@@ -90,6 +93,11 @@ __all__ = [
 #: takes it as ``eps: float = _EPS`` and uses the parameter. That keeps one
 #: source for the number without scattering the literal.
 _EPS: float = 1e-9
+
+#: Below this an *axis* cannot be normalized. Matches the scalar core's
+#: kMinAxisNorm, the threshold vec::normalize_axis applies, which is a thousand
+#: times smaller than kMinQuaternionNorm (CONVENTIONS.md section 8).
+_EPS_AXIS: float = 1e-12
 
 
 def _jit_requested() -> bool:
@@ -145,6 +153,16 @@ def _quat_normalize(q: Tensor) -> Tensor:
 
 def _quat_conjugate(q: Tensor) -> Tensor:
     return torch.cat([q[..., 0:1], -q[..., 1:4]], dim=-1)
+
+
+def _quat_inv(q: Tensor, eps: float = _EPS) -> Tensor:
+    # conjugate / |q|^2, so a non-unit quaternion inverts exactly, as in the
+    # scalar quat::inverse. That one refuses |q| < kMinQuaternionNorm; a batch
+    # cannot fail one lane, so the squared norm is clamped at the same
+    # threshold instead and a zero quaternion maps to zero.
+    return _quat_conjugate(q) / torch.clamp(
+        torch.sum(q * q, dim=-1, keepdim=True), min=eps * eps
+    )
 
 
 def _quat_unique(q: Tensor) -> Tensor:
@@ -278,6 +296,61 @@ def _quat_from_matrix(m: Tensor) -> Tensor:
     return _quat_normalize(torch.nan_to_num(candidate, nan=0.0))
 
 
+def _quat_from_euler_xyz(roll: Tensor, pitch: Tensor, yaw: Tensor) -> Tensor:
+    # Fixed-axis XYZ, the inverse of quat_to_euler_xyz and the same product as
+    # the scalar quat::from_rpy: yaw about Z, after pitch about Y, after roll
+    # about X. Takes the three angles separately, as mjlab's function of the
+    # same name does, so a call site moves over unchanged.
+    cr = torch.cos(roll * 0.5)
+    sr = torch.sin(roll * 0.5)
+    cp = torch.cos(pitch * 0.5)
+    sp = torch.sin(pitch * 0.5)
+    cy = torch.cos(yaw * 0.5)
+    sy = torch.sin(yaw * 0.5)
+    return torch.stack(
+        [
+            cr * cp * cy + sr * sp * sy,
+            sr * cp * cy - cr * sp * sy,
+            cr * sp * cy + sr * cp * sy,
+            cr * cp * sy - sr * sp * cy,
+        ],
+        dim=-1,
+    )
+
+
+def _quat_from_axis_angle(
+    axis: Tensor, angle: Tensor, eps: float = _EPS_AXIS
+) -> Tensor:
+    # Axis (..., 3), need not be unit; angle (...) in radians, right-handed.
+    # The scalar quat::from_axis_angle refuses an axis with no direction; here
+    # that lane is the identity, which is what a zero axis means for any angle
+    # a caller could have intended with it. "No direction" is kMinAxisNorm, as
+    # in vec::normalize_axis, not the quaternion norm floor.
+    norm = torch.linalg.vector_norm(axis, dim=-1, keepdim=True)
+    half = (angle * 0.5).unsqueeze(-1)
+    # The angle indexes the axis batch dims; it does not add one. A keepdim
+    # (..., 1) angle would align its trailing 1 against the axis's 3 and
+    # broadcast into an extra dimension -- N x N quaternions, silently -- so it
+    # is refused rather than honoured. A bare (3,) axis has no batch dims and
+    # keeps the "one axis, many angles" shorthand.
+    assert half.dim() <= axis.dim() or axis.dim() == 1, (
+        "angle must index the axis batch dims, not add one: pass (...) for an "
+        "axis of (..., 3), not a keepdim (..., 1)"
+    )
+    # One unsqueeze only aligns an angle of exactly the axis's batch rank, so
+    # (B, P, 3) axes with a (B,) angle would fail at the multiply. Insert the
+    # remaining point axes the way _quat_rotate does for its points.
+    while half.dim() < axis.dim():
+        half = half.unsqueeze(-2)
+    xyz = axis / torch.clamp(norm, min=eps) * torch.sin(half)
+    # torch.cat does not broadcast, so w is expanded to the shape the vector
+    # part already broadcast to -- e.g. one shared angle for N axes.
+    q = torch.cat([torch.cos(half).expand_as(xyz[..., 0:1]), xyz], dim=-1)
+    identity = torch.zeros_like(q)
+    identity[..., 0] = 1.0
+    return torch.where(norm < eps, identity, q)
+
+
 def _quat_to_euler_xyz(q: Tensor) -> Tensor:
     """Fixed-axis XYZ roll/pitch/yaw, matching the scalar core exactly.
 
@@ -407,6 +480,7 @@ def _sample_direction_in_cone(axis: Tensor, cone_angle_rad: float, n: int) -> Te
 normalize = _script(_normalize)
 quat_normalize = _script(_quat_normalize)
 quat_conjugate = _script(_quat_conjugate)
+quat_inv = _script(_quat_inv)
 quat_unique = _script(_quat_unique)
 quat_mul = _script(_quat_mul)
 quat_rotate = _script(_quat_rotate)
@@ -415,6 +489,8 @@ quat_apply = quat_rotate
 quat_to_matrix = _script(_quat_to_matrix)
 quat_from_matrix = _script(_quat_from_matrix)
 quat_to_euler_xyz = _script(_quat_to_euler_xyz)
+quat_from_euler_xyz = _script(_quat_from_euler_xyz)
+quat_from_axis_angle = _script(_quat_from_axis_angle)
 quat_from_z_direction = _script(_quat_from_z_direction)
 direction_to_quat = _script(_direction_to_quat)
 sample_direction_in_cone = _script(_sample_direction_in_cone)

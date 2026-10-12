@@ -95,6 +95,71 @@ def test_quat_conjugate_matches_the_scalar_core(golden, device, dtype):
 
 @pytest.mark.parametrize("dtype", DTYPES)
 @pytest.mark.parametrize("device", DEVICES)
+def test_quat_inv_matches_the_scalar_core(golden, device, dtype):
+    # Includes the golden file's non-unit case: the inverse divides by |q|^2,
+    # it does not assume a unit quaternion the way the conjugate would.
+    cases = _cases(golden, "quat_inverse")
+    assert cases, "no quat_inverse cases in the golden file"
+    q = torch.tensor(
+        [_quat(c["input"]["q"]) for c in cases], device=device, dtype=dtype
+    )
+    expected = torch.tensor(
+        [_quat(c["expect"]["quaternion"]) for c in cases], device=device, dtype=dtype
+    )
+    assert torch.allclose(cwt.quat_inv(q), expected, atol=TOLERANCE[dtype])
+
+
+@pytest.mark.parametrize("dtype", DTYPES)
+@pytest.mark.parametrize("device", DEVICES)
+def test_quat_from_euler_xyz_matches_the_scalar_core(golden, device, dtype):
+    cases = _cases(golden, "quat_from_rpy")
+    assert cases, "no quat_from_rpy cases in the golden file"
+    angles = torch.tensor(
+        [[c["input"]["roll"], c["input"]["pitch"], c["input"]["yaw"]] for c in cases],
+        device=device,
+        dtype=dtype,
+    )
+    expected = torch.tensor(
+        [_quat(c["expect"]["quaternion"]) for c in cases], device=device, dtype=dtype
+    )
+    result = cwt.quat_from_euler_xyz(angles[:, 0], angles[:, 1], angles[:, 2])
+    assert torch.allclose(result, expected, atol=TOLERANCE[dtype])
+
+
+@pytest.mark.parametrize("dtype", DTYPES)
+@pytest.mark.parametrize("device", DEVICES)
+def test_quat_from_axis_angle_matches_the_scalar_core(golden, device, dtype):
+    # Includes an unnormalized axis and a full turn (w = -1, not +1).
+    cases = _cases(golden, "quat_from_axis_angle")
+    assert cases, "no quat_from_axis_angle cases in the golden file"
+    axis = torch.tensor(
+        [_vec(c["input"]["axis"]) for c in cases], device=device, dtype=dtype
+    )
+    angle = torch.tensor(
+        [c["input"]["angle"] for c in cases], device=device, dtype=dtype
+    )
+    expected = torch.tensor(
+        [_quat(c["expect"]["quaternion"]) for c in cases], device=device, dtype=dtype
+    )
+    assert torch.allclose(
+        cwt.quat_from_axis_angle(axis, angle), expected, atol=TOLERANCE[dtype]
+    )
+
+
+@pytest.mark.parametrize("dtype", DTYPES)
+@pytest.mark.parametrize("device", DEVICES)
+def test_euler_round_trip_through_the_kernels(device, dtype):
+    angles = torch.tensor(
+        [[0.3, -0.4, 1.2], [-2.5, 0.9, 3.0], [0.0, 0.0, 0.0]],
+        device=device,
+        dtype=dtype,
+    )
+    q = cwt.quat_from_euler_xyz(angles[:, 0], angles[:, 1], angles[:, 2])
+    assert torch.allclose(cwt.quat_to_euler_xyz(q), angles, atol=TOLERANCE[dtype])
+
+
+@pytest.mark.parametrize("dtype", DTYPES)
+@pytest.mark.parametrize("device", DEVICES)
 def test_quat_normalize_matches_the_scalar_core(golden, device, dtype):
     cases = _cases(golden, "quat_normalize")
     q = torch.tensor(
@@ -317,18 +382,34 @@ def test_gradients_flow_through_every_kernel():
     quat = torch.nn.functional.normalize(torch.randn(5, 4, dtype=torch.float64), dim=-1)
     quat.requires_grad_(True)
     vec = torch.randn(5, 3, dtype=torch.float64, requires_grad=True)
+    angle = torch.randn(5, dtype=torch.float64, requires_grad=True)
+    axis = torch.randn(5, 3, dtype=torch.float64, requires_grad=True)
 
     loss = (
         cwt.quat_rotate(quat, vec).sum()
         + cwt.quat_mul(quat, quat).sum()
         + cwt.quat_to_matrix(quat).sum()
         + cwt.quat_to_euler_xyz(quat).sum()
+        + cwt.quat_inv(quat).sum()
+        + cwt.quat_from_euler_xyz(angle, angle, angle).sum()
+        + cwt.quat_from_axis_angle(axis, angle).sum()
     )
     loss.backward()
-    assert quat.grad is not None
-    assert torch.isfinite(quat.grad).all()
-    assert vec.grad is not None
-    assert torch.isfinite(vec.grad).all()
+    for tensor in (quat, vec, angle, axis):
+        assert tensor.grad is not None
+        assert torch.isfinite(tensor.grad).all()
+
+
+def test_the_degenerate_axis_lane_has_a_finite_gradient():
+    # The forward value of a zero axis is asserted in
+    # test_degenerate_input_clamps_instead_of_raising. vector_norm has no
+    # derivative at the origin, so the backward pass through that lane is a
+    # separate claim.
+    axis = torch.zeros(3, 3, dtype=torch.float64, requires_grad=True)
+    angle = torch.tensor([0.5, 1.0, -2.0], dtype=torch.float64)
+    cwt.quat_from_axis_angle(axis, angle).sum().backward()
+    assert axis.grad is not None
+    assert torch.isfinite(axis.grad).all()
 
 
 def test_kernels_are_scripted_and_serializable(tmp_path):
@@ -374,6 +455,73 @@ def test_degenerate_input_clamps_instead_of_raising():
     assert torch.isfinite(
         cwt.quat_from_z_direction(torch.zeros(3, 3, dtype=torch.float64))
     ).all()
+    # Where the scalar core reports invalid_quaternion / invalid_axis: the zero
+    # quaternion inverts to zero, and a zero axis is the identity rotation.
+    assert torch.equal(cwt.quat_inv(zeros), zeros)
+    identity = torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float64).expand(3, 4)
+    assert torch.equal(
+        cwt.quat_from_axis_angle(
+            torch.zeros(3, 3, dtype=torch.float64),
+            torch.tensor([0.5, 1.0, -2.0], dtype=torch.float64),
+        ),
+        identity,
+    )
+
+
+def test_a_tiny_axis_is_degenerate_only_where_the_scalar_core_says_so():
+    # The axis threshold is kMinAxisNorm (1e-12), not kMinQuaternionNorm
+    # (1e-9): between the two the scalar core still normalizes the axis and
+    # builds the rotation, so the batch must too.
+    from cyberwave_geometry import GeometryError, Vector3
+    from cyberwave_geometry import quaternion as scalar
+
+    expected = scalar.from_axis_angle(Vector3(1e-10, 0.0, 0.0), math.pi)
+    quat = cwt.quat_from_axis_angle(
+        torch.tensor([[1e-10, 0.0, 0.0], [1e-13, 0.0, 0.0]], dtype=torch.float64),
+        torch.tensor([math.pi, math.pi], dtype=torch.float64),
+    )
+    assert torch.allclose(
+        quat[0],
+        torch.tensor(
+            [expected.w, expected.x, expected.y, expected.z], dtype=torch.float64
+        ),
+        atol=1e-12,
+    )
+    # Below kMinAxisNorm the scalar core refuses; the batch lane is identity.
+    with pytest.raises(GeometryError):
+        scalar.from_axis_angle(Vector3(1e-13, 0.0, 0.0), math.pi)
+    assert torch.equal(quat[1], torch.tensor([1.0, 0.0, 0.0, 0.0], dtype=torch.float64))
+
+
+def test_quat_from_axis_angle_broadcasts_a_shared_angle():
+    axis = torch.randn(5, 3, dtype=torch.float64)
+    expected = cwt.quat_from_axis_angle(
+        axis, torch.full((5,), 0.5, dtype=torch.float64)
+    )
+    for angle in (torch.tensor(0.5), torch.tensor([0.5])):
+        result = cwt.quat_from_axis_angle(axis, angle.to(torch.float64))
+        assert result.shape == (5, 4)
+        assert torch.allclose(result, expected)
+
+
+def test_quat_from_axis_angle_aligns_a_batch_angle_with_point_axes():
+    # (B, P, 3) axes with a (B,) angle: one angle per batch row, shared by its
+    # points, exactly as if the angle had been expanded to (B, P).
+    axis = torch.randn(2, 3, 3, dtype=torch.float64)
+    angle = torch.tensor([0.5, -1.25], dtype=torch.float64)
+    result = cwt.quat_from_axis_angle(axis, angle)
+    assert result.shape == (2, 3, 4)
+    assert torch.allclose(
+        result, cwt.quat_from_axis_angle(axis, angle.unsqueeze(-1).expand(2, 3))
+    )
+
+
+def test_quat_from_axis_angle_refuses_a_keepdim_angle():
+    # A (N, 1) angle would otherwise broadcast against the axis's 3 into
+    # N x N quaternions without an error.
+    axis = torch.randn(4, 3, dtype=torch.float64)
+    with pytest.raises((AssertionError, torch.jit.Error), match="keepdim"):
+        cwt.quat_from_axis_angle(axis, torch.zeros(4, 1, dtype=torch.float64))
 
 
 def test_quat_unique_canonicalizes_the_double_cover():

@@ -12,6 +12,11 @@
 # consumer back, not about what the sources need.
 cmake_minimum_required(VERSION 3.14)
 
+# 0.2.2: cyberwave_geometry.torch gained quat_inv, quat_from_euler_xyz and
+#        quat_from_axis_angle, checked against the existing golden cases, so
+#        the RL tasks need nothing from mjlab's math module but sampling. The
+#        C++ surface and its numerics are unchanged.
+# 0.2.1: skipped -- open PR #3529 uses 0.2.1 for separate fk / C-ABI work.
 # 0.2.0: renamed the three accessors that did not read as conversions --
 #        quat::yaw -> to_yaw, geo::compass_heading_deg -> to_compass_heading_deg,
 #        geo::ned_rpy -> to_ned_rpy, and the matching cw_geom_* entry points.
@@ -26,7 +31,7 @@ cmake_minimum_required(VERSION 3.14)
 # whenever numeric behaviour changes and the patch when the surface grows, so a
 # stale artifact -- a wheel or a Docker layer built before the change -- fails
 # on its version pin rather than at the call site with an AttributeError.
-project(CyberwaveGeometry VERSION 0.2.0 LANGUAGES CXX)
+project(CyberwaveGeometry VERSION 0.2.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
