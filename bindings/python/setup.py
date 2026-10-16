@@ -8,8 +8,11 @@ target machine. That is what makes it possible for the backend, the SDK,
 
 Consequences, both deliberate:
 
-* the wheel is tagged for a platform, not ``py3-none-any``, so a release needs
-  one build per platform (cibuildwheel);
+* the wheel is tagged ``py3-none-<platform>``: platform-specific because of the
+  bundled core, but interpreter-agnostic because ctypes binds to no CPython
+  ABI. One build per platform covers every Python the package supports, now and
+  after the next release -- an interpreter tag would mean a new wheel, and an
+  uninstallable package until someone cut one, every time CPython ships;
 * an unsupported platform fails loudly at install time rather than silently
   falling back to a second, drifting Python implementation of the same maths.
 
@@ -24,10 +27,10 @@ import os
 import shutil
 import subprocess
 import sys
-import sysconfig
 from pathlib import Path
 
 from setuptools import Distribution, setup
+from setuptools.command.bdist_wheel import bdist_wheel
 from setuptools.command.build_py import build_py
 
 HERE = Path(__file__).resolve().parent
@@ -157,11 +160,27 @@ class BinaryDistribution(Distribution):
     def has_ext_modules(self) -> bool:
         return True
 
-    def get_tag(self):  # pragma: no cover - setuptools internals
-        return (sysconfig.get_python_version(), "none", None)
+
+class BDistWheel(bdist_wheel):
+    """Keep the platform tag, drop the interpreter tag.
+
+    ``has_ext_modules`` above answers "is this wheel platform-specific?", and
+    setuptools reads the same answer as "which interpreter was it built
+    against?" -- so the wheel came out ``cp312-cp312-<platform>`` though the
+    package holds no extension module and never touches the CPython ABI. The
+    core is loaded with ``ctypes.CDLL`` (see ``_native.py``), which cares about
+    the platform and nothing else.
+
+    ``requires-python`` stays the floor; this only stops a wheel refusing a
+    CPython that did not exist when it was built.
+    """
+
+    def get_tag(self) -> tuple[str, str, str]:
+        _, _, platform_tag = super().get_tag()
+        return "py3", "none", platform_tag
 
 
 setup(
-    cmdclass={"build_py": BuildWithCore},
+    cmdclass={"build_py": BuildWithCore, "bdist_wheel": BDistWheel},
     distclass=BinaryDistribution,
 )

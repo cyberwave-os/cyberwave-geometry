@@ -25,9 +25,13 @@
 #
 # Environment:
 #   OUT      - output directory for the repaired wheels (default /out)
-#   PYTHONS  - space-separated CPython tags to build for. One wheel per tag:
-#              setup.py forces a platform tag, and bdist_wheel then also
-#              stamps the ABI, so the wheels are cp3XX-specific in practice.
+#   PYTHON   - the CPython tag to build under, one only: setup.py tags the
+#              wheel py3-none-<platform>, so it covers every supported Python
+#              whichever one builds it. A second build would land on the same
+#              filename and silently replace the first.
+#   TEST_PYTHONS - CPython tags to install and import the finished wheel under.
+#              Defaults to every CPython in the image from 3.10 up, which is
+#              what proves the py3 tag rather than assuming it.
 set -euo pipefail
 
 # Build from a copy, not from the mounted checkout: setuptools writes egg-info
@@ -48,15 +52,15 @@ mkdir -p "$CORE"
 tar -C "$SRC" --exclude=build --exclude='*.egg-info' -cf - . | tar -C "$CORE" -xf -
 
 OUT=${OUT:-/out}
-PYTHONS=${PYTHONS:-"cp310-cp310 cp311-cp311 cp312-cp312 cp313-cp313 cp314-cp314"}
+PYTHON=${PYTHON:-cp312-cp312}
 
 # cmake is not guaranteed in the manylinux image; take it from pip so the
 # version comes from the image's Python rather than the base OS.
-export PATH="/opt/python/cp312-cp312/bin:$PATH"
+export PATH="/opt/python/${PYTHON}/bin:$PATH"
 pip install --no-cache-dir --quiet cmake ninja
 
-# Build the core once and hand it to every per-Python wheel build, rather than
-# recompiling it once per interpreter.
+# Build the core here and hand it to the wheel build, rather than letting
+# setup.py shell out to CMake a second time.
 cmake -S "$CORE" -B /tmp/geometry-build \
   -DCMAKE_BUILD_TYPE=Release \
   -DCYBERWAVE_GEOMETRY_BUILD_TESTS=OFF \
@@ -70,11 +74,9 @@ CORE_LIB=/tmp/geometry-build/libcyberwave_geometry_c.so
 test -f "$CORE_LIB"
 
 mkdir -p /tmp/raw "$OUT"
-for py in $PYTHONS; do
-  echo "=== building for ${py} ==="
-  CYBERWAVE_GEOMETRY_PREBUILT_LIBRARY="$CORE_LIB" \
-    "/opt/python/${py}/bin/pip" wheel --no-deps -w /tmp/raw "$CORE/bindings/python"
-done
+echo "=== building under ${PYTHON} ==="
+CYBERWAVE_GEOMETRY_PREBUILT_LIBRARY="$CORE_LIB" \
+  "/opt/python/${PYTHON}/bin/pip" wheel --no-deps -w /tmp/raw "$CORE/bindings/python"
 
 for w in /tmp/raw/*.whl; do
   echo "=== auditwheel repair $(basename "$w") ==="
@@ -87,7 +89,30 @@ ls -1 "$OUT"
 # Prove the published artefact actually works, here, rather than finding out
 # when something tries to install it. The wheel carries the core inside the
 # package, so this needs no CYBERWAVE_GEOMETRY_LIBRARY in the environment.
-echo "=== install and import check ==="
-/opt/python/cp312-cp312/bin/pip install --no-index --find-links "$OUT" cyberwave-geometry
-/opt/python/cp312-cp312/bin/python -c \
-  "import cyberwave_geometry as g; print('geometry core', g.core_version(), 'from', g._native.library_path)"
+#
+# Under every interpreter, not just the one that built it: a py3-none wheel
+# claims to serve all of them, and that claim is the whole point of the tag.
+# Discovered from the image rather than listed, so a CPython that ships after
+# this runs is covered without anyone editing the list -- which is the
+# property the tag exists to give us. Free-threaded and PyPy builds are left
+# out as untargeted, and anything below 3.10 by requires-python.
+if [ -z "${TEST_PYTHONS:-}" ]; then
+  TEST_PYTHONS=""
+  for d in /opt/python/cp3*-cp3*; do
+    tag=$(basename "$d")
+    case "$tag" in *t) continue ;; esac
+    minor=${tag#cp3}
+    minor=${minor%%-*}
+    [ "$minor" -ge 10 ] 2>/dev/null || continue
+    TEST_PYTHONS="${TEST_PYTHONS} ${tag}"
+  done
+fi
+
+echo "=== install and import check (${TEST_PYTHONS# }) ==="
+for py in $TEST_PYTHONS; do
+  echo "--- ${py} ---"
+  "/opt/python/${py}/bin/pip" install --quiet --root-user-action=ignore \
+    --no-index --find-links "$OUT" cyberwave-geometry
+  "/opt/python/${py}/bin/python" -c \
+    "import cyberwave_geometry as g; print('geometry core', g.core_version(), 'from', g._native.library_path)"
+done

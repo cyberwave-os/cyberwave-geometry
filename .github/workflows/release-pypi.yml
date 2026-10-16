@@ -108,9 +108,16 @@ jobs:
           package-dir: bindings/python
           output-dir: wheelhouse
         env:
-          # The same five interpreters PYTHONS covers in
-          # .github/scripts/build_manylinux_wheels.sh.
+          # Build once, test on each: setup.py tags the wheel
+          # py3-none-<platform>, so cibuildwheel builds the first interpreter
+          # and reuses that wheel for the rest, while CIBW_TEST_COMMAND still
+          # runs under every one. The manylinux script does the same for Linux
+          # with TEST_PYTHONS. Same list as geometry-core.yml.
           CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+          # Declared rather than inherited, so the published Intel wheel's
+          # macOS floor does not depend on which interpreter builds first.
+          # See geometry-core.yml for the reasoning.
+          MACOSX_DEPLOYMENT_TARGET: "10.13"
           CIBW_SKIP: "*-win32 *_i686"
           CIBW_ARCHS: ${{ matrix.target.cibw_archs }}
           CIBW_BUILD_VERBOSITY: 1

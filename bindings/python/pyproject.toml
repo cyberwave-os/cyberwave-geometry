@@ -6,12 +6,15 @@
 # from the build interpreter, which fails as "No module named 'cmake'" rather
 # than as anything about cmake being missing. 3.14 is the floor the core's own
 # CMakeLists declares.
-requires = ["setuptools>=68", "cmake>=3.14"]
+# setuptools>=70.1 for setuptools.command.bdist_wheel, which setup.py subclasses
+# to tag the wheel py3-none-<platform>; before that it lived in the `wheel`
+# package and this import would fail.
+requires = ["setuptools>=70.1", "cmake>=3.14"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cyberwave-geometry"
-version = "0.2.2"
+version = "0.2.3"
 description = "Python binding for the Cyberwave shared geometry core (quaternions, transforms, forward kinematics)"
 readme = "README.md"
 requires-python = ">=3.10"

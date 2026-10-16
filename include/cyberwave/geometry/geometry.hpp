@@ -23,7 +23,7 @@ namespace geometry
 /// refuse to load against a core it was not conformance-tested against.
 constexpr int kVersionMajor = 0;
 constexpr int kVersionMinor = 2;
-constexpr int kVersionPatch = 2;
+constexpr int kVersionPatch = 3;
 
 const char* version_string();
 
