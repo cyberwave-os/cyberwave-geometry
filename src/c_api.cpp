@@ -345,6 +345,29 @@ extern "C"
         return CW_GEOM_OK;
     }
 
+    cw_geom_status cw_geom_quat_nearest_from_matrix(const double* m9, cw_geom_quat* out)
+    {
+        if (m9 == nullptr)
+        {
+            return CW_GEOM_ERR_INVALID_ROTATION_MATRIX;
+        }
+        Matrix3 matrix;
+        for (std::size_t index = 0; index < 9; ++index)
+        {
+            matrix.m[index] = m9[index];
+        }
+        const auto result = quat::nearest_from_matrix(matrix);
+        if (!result)
+        {
+            return to_status(result.error().code);
+        }
+        if (out != nullptr)
+        {
+            *out = to_c(result.value());
+        }
+        return CW_GEOM_OK;
+    }
+
     /* --- transform ----------------------------------------------------------- */
 
     cw_geom_transform cw_geom_transform_identity(void) { return to_c(Transform::identity()); }

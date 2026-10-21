@@ -64,4 +64,4 @@ def core_version() -> str:
     return lib.cw_geom_version().decode()
 
 
-__version__ = "0.2.3"
+__version__ = "0.2.5"

@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cyberwave-geometry"
-version = "0.2.3"
+version = "0.2.5"
 description = "Python binding for the Cyberwave shared geometry core (quaternions, transforms, forward kinematics)"
 readme = "README.md"
 requires-python = ">=3.10"

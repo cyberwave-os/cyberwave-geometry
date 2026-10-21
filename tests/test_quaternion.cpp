@@ -383,6 +383,130 @@ TEST(from_matrix_rejects_non_finite_input)
     CHECK(result.error().code == ErrorCode::kNonFiniteValue);
 }
 
+TEST(nearest_from_matrix_agrees_with_from_matrix_on_a_rotation)
+{
+    // Same rotation *and* the same sign, so swapping one call for the other
+    // never flips a published quaternion.
+    const Quaternion cases[] = {
+        kSample,
+        quat::from_rpy(0.1, 0.2, 0.3),
+        quat::from_rpy(2.9, -1.2, -2.8),
+        quat::from_axis_angle(Vector3{1, 0, 0}, kPi).value(),
+        quat::from_axis_angle(Vector3{0, 1, 0}, kPi).value(),
+        quat::from_axis_angle(Vector3{0, 0, 1}, kPi).value(),
+        quat::from_axis_angle(Vector3{1, -2, 0.5}, 2.5).value(),
+    };
+    for (const Quaternion& original : cases)
+    {
+        const Matrix3 matrix = quat::to_matrix(original).value();
+        const auto strict = quat::from_matrix(matrix);
+        const auto nearest = quat::nearest_from_matrix(matrix);
+        CHECK(strict.ok());
+        CHECK(nearest.ok());
+        CHECK_MSG(cwtest::near(nearest.value(), strict.value(), 1e-12),
+                  cwtest::to_string(nearest.value()) + " vs " + cwtest::to_string(strict.value()));
+    }
+}
+
+TEST(nearest_from_matrix_ignores_a_positive_scale)
+{
+    const Matrix3 rotation = quat::to_matrix(kSample).value();
+    for (double factor : {2.0, 1e-200, 1e300})
+    {
+        Matrix3 scaled = rotation;
+        for (double& component : scaled.m)
+        {
+            component *= factor;
+        }
+        const auto result = quat::nearest_from_matrix(scaled);
+        CHECK(result.ok());
+        CHECK(cwtest::same_rotation(result.value(), kSample, 1e-12));
+    }
+}
+
+TEST(nearest_from_matrix_splits_a_skewed_frame_evenly)
+{
+    // Unit x and y, and a unit z leaning theta towards x: the nearest rotation
+    // turns by theta / 2 about y, halfway between the two candidate frames.
+    const double theta = 0.3;
+    Matrix3 skewed = Matrix3::identity();
+    skewed.at(0, 2) = std::sin(theta);
+    skewed.at(2, 2) = std::cos(theta);
+    const auto result = quat::nearest_from_matrix(skewed);
+    CHECK(result.ok());
+    CHECK(cwtest::near(result.value(), quat::from_axis_angle(Vector3{0, 1, 0}, theta / 2).value(), 1e-12));
+}
+
+TEST(nearest_from_matrix_is_the_orthogonal_polar_factor)
+{
+    // For det > 0 the nearest rotation R is the polar factor of M = R P, so
+    // R^T M = P must come out symmetric.
+    Matrix3 m;
+    m.m = {0.93, -0.27, 0.21, 0.31, 0.95, -0.08, -0.18, 0.12, 0.98};
+    const auto result = quat::nearest_from_matrix(m);
+    CHECK(result.ok());
+    const Matrix3 r = quat::to_matrix(result.value()).value();
+    double p[3][3] = {};
+    for (int i = 0; i < 3; ++i)
+    {
+        for (int j = 0; j < 3; ++j)
+        {
+            for (int k = 0; k < 3; ++k)
+            {
+                p[i][j] += r.at(k, i) * m.at(k, j);
+            }
+        }
+    }
+    CHECK_NEAR(p[0][1], p[1][0], 1e-14);
+    CHECK_NEAR(p[0][2], p[2][0], 1e-14);
+    CHECK_NEAR(p[1][2], p[2][1], 1e-14);
+}
+
+TEST(nearest_from_matrix_projects_a_reflection_with_a_unique_answer)
+{
+    // Singular values (3, 2, 1) and det < 0: flipping the smallest is the
+    // unique nearest proper rotation, here the identity.
+    Matrix3 reflection = Matrix3::identity();
+    reflection.at(0, 0) = 3.0;
+    reflection.at(1, 1) = 2.0;
+    reflection.at(2, 2) = -1.0;
+    const auto result = quat::nearest_from_matrix(reflection);
+    CHECK(result.ok());
+    CHECK(cwtest::near(result.value(), Quaternion::identity(), 1e-12));
+}
+
+TEST(nearest_from_matrix_rejects_an_ambiguous_matrix)
+{
+    Matrix3 mirrored = quat::to_matrix(kSample).value();
+    mirrored.at(0, 0) = -mirrored.at(0, 0);
+    mirrored.at(1, 0) = -mirrored.at(1, 0);
+    mirrored.at(2, 0) = -mirrored.at(2, 0);
+    Matrix3 flipped_z = Matrix3::identity();
+    flipped_z.at(2, 2) = -1.0;
+    Matrix3 rank_one;
+    rank_one.m = {1, 0, 0, 0, 0, 0, 0, 0, 0};
+    Matrix3 zero;
+    zero.m = {};
+    for (const Matrix3& matrix : {mirrored, flipped_z, rank_one, zero})
+    {
+        const auto result = quat::nearest_from_matrix(matrix);
+        CHECK(!result.ok());
+        CHECK(result.error().code == ErrorCode::kInvalidRotationMatrix);
+    }
+}
+
+TEST(nearest_from_matrix_rejects_non_finite_input)
+{
+    for (double bad : {std::nan(""), HUGE_VAL})
+    {
+        Matrix3 broken = Matrix3::identity();
+        broken.at(1, 2) = bad;
+        const auto result = quat::nearest_from_matrix(broken);
+        CHECK(!result.ok());
+        CHECK(result.error().code == ErrorCode::kNonFiniteValue);
+    }
+}
+
 TEST(to_matrix_rejects_a_degenerate_quaternion)
 {
     CHECK((!quat::to_matrix(Quaternion{.x = 0, .y = 0, .z = 0, .w = 0}).ok()));

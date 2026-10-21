@@ -6,7 +6,7 @@ formula, the answer is in here — and then you should not write the formula, yo
 should call the core.
 
 The executable version of this document is
-[`golden/geometry_golden.json`](golden/geometry_golden.json): 420 cases that
+[`golden/geometry_golden.json`](golden/geometry_golden.json): 432 cases that
 every language binding is tested against.
 
 ---
@@ -153,7 +153,7 @@ subject it failed on:
 | `invalid_quaternion`      | non-finite, or norm below `1e-9`                      |
 | `invalid_axis`            | non-finite, or norm below `1e-12`                     |
 | `non_finite_value`        | a NaN or infinity reached the arithmetic              |
-| `invalid_rotation_matrix` | not right-handed orthonormal within tolerance         |
+| `invalid_rotation_matrix` | not right-handed orthonormal within tolerance, or no unique nearest rotation |
 | `no_links`                | the description declares nothing                      |
 | `no_root`                 | every link has a parent joint, or the frame is cut off |
 | `multiple_roots`          | the description is disconnected                       |
@@ -183,6 +183,15 @@ from cyberwave_geometry import compat
 
 compat.normalize_quaternion_or_identity(payload.rotation)   # all-zero -> identity
 ```
+
+One lenient operation is arithmetic rather than parsing, so it lives in the core
+under its own name: `quat::nearest_from_matrix` projects any 3x3 onto the
+nearest proper rotation (Frobenius norm, the SVD projection), for frames built
+from measured axes that are only approximately orthogonal. `from_matrix` stays
+strict; reaching for the projection is the visible, greppable decision. It
+still refuses the inputs that have no single answer -- a rank-deficient matrix,
+or a reflection whose two smallest singular values are equal -- rather than
+picking one.
 
 ### Tree errors are collected, not raised
 
@@ -241,6 +250,7 @@ blindly, and it is not in radians.
 | `kMinQuaternionNorm` | `1e-9`  | below this a quaternion carries no usable rotation   |
 | `kMinAxisNorm`       | `1e-12` | below this an axis cannot be normalized              |
 | `kMinCosPitch`       | `1e-12` | below this `\|cos(pitch)\|` an rpy split is singular |
+| `kMinNearestRotationGap` | `1e-12` | below this eigenvalue gap (relative to the largest entry) the nearest rotation is not unique |
 | golden `tolerance`   | `1e-12` | cross-language comparison budget                     |
 
 `kMinCosPitch` is tested on `cos(pitch)`, taken as `hypot(R00, R10)`, and never

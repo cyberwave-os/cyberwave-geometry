@@ -161,6 +161,9 @@ extern "C"
     /* Row-major, 9 doubles. */
     CW_GEOM_API cw_geom_status cw_geom_quat_to_matrix(cw_geom_quat q, double* out9);
     CW_GEOM_API cw_geom_status cw_geom_quat_from_matrix(const double* m9, double tolerance, cw_geom_quat* out);
+    /* Nearest proper rotation to any 3x3 (row-major, 9 doubles); see
+       quat::nearest_from_matrix. */
+    CW_GEOM_API cw_geom_status cw_geom_quat_nearest_from_matrix(const double* m9, cw_geom_quat* out);
 
     /* --- transform ----------------------------------------------------------- */
 

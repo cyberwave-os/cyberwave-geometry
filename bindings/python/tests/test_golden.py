@@ -170,6 +170,11 @@ def _evaluate(robots: dict, op: str, payload: dict) -> dict:
                 "status": "ok",
                 "quaternion": quat.from_matrix(payload["matrix"]).to_dict(),
             }
+        if op == "quat_nearest_from_matrix":
+            return {
+                "status": "ok",
+                "quaternion": quat.nearest_from_matrix(payload["matrix"]).to_dict(),
+            }
         if op == "transform_normalize":
             return {
                 "status": "ok",

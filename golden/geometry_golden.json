@@ -1,6 +1,6 @@
 {
   "$schema_note": "Golden vectors for the Cyberwave geometry core. Quaternions are objects with named x/y/z/w; vectors with named x/y/z; matrices are row-major 9-element arrays. Regenerate with `golden_gen --write`.",
-  "version": "0.2.3",
+  "version": "0.2.5",
   "tolerance": 9.9999999999999998e-13,
   "robots": {
     "two_link_arm": {
@@ -3058,6 +3058,294 @@
           0.19866933079506122,
           0.097843395007255696,
           0.97517032720181585
+        ]
+      },
+      "expect": {
+        "status": "invalid_rotation_matrix"
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.rotation_general",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          0.93629336358419923,
+          -0.27509584731824377,
+          0.21835066314633444,
+          0.28962947762551561,
+          0.95642508584923247,
+          -0.036957013524625069,
+          -0.19866933079506122,
+          0.097843395007255696,
+          0.97517032720181585
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 0.98334744325635592,
+          "x": 0.034270798550482089,
+          "y": 0.10602051106179564,
+          "z": 0.14357217502739189
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.rotation_half_turn_x",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          1,
+          0,
+          0,
+          0,
+          -1,
+          -1.2246467991473532e-16,
+          0,
+          1.2246467991473532e-16,
+          -1
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 6.123233995736766e-17,
+          "x": 1,
+          "y": 0,
+          "z": 0
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.rotation_half_turn_y",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          -1,
+          0,
+          1.2246467991473532e-16,
+          0,
+          1,
+          0,
+          -1.2246467991473532e-16,
+          0,
+          -1
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 6.123233995736766e-17,
+          "x": 0,
+          "y": 1,
+          "z": 0
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.rotation_half_turn_z",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          -1,
+          -1.2246467991473532e-16,
+          0,
+          1.2246467991473532e-16,
+          -1,
+          0,
+          0,
+          0,
+          1
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 6.123233995736766e-17,
+          "x": 0,
+          "y": 0,
+          "z": 1
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.scaled",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          1.8725867271683985,
+          -0.55019169463648754,
+          0.43670132629266889,
+          0.57925895525103122,
+          1.9128501716984649,
+          -0.073914027049250139,
+          -0.39733866159012243,
+          0.19568679001451139,
+          1.9503406544036317
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 0.98334744325635592,
+          "x": 0.034270798550482089,
+          "y": 0.10602051106179564,
+          "z": 0.14357217502739189
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.mirrored_is_ambiguous",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          -0.93629336358419923,
+          -0.27509584731824377,
+          0.21835066314633444,
+          -0.28962947762551561,
+          0.95642508584923247,
+          -0.036957013524625069,
+          0.19866933079506122,
+          0.097843395007255696,
+          0.97517032720181585
+        ]
+      },
+      "expect": {
+        "status": "invalid_rotation_matrix"
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.skewed_frame",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          1,
+          0,
+          0.29552020666133955,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0.95533648912560598
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 0.99718881811220739,
+          "x": 0,
+          "y": 0.074929707272742341,
+          "z": 0
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.perturbed",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          0.93000000000000005,
+          -0.27000000000000002,
+          0.20999999999999999,
+          0.31,
+          0.94999999999999996,
+          -0.080000000000000002,
+          -0.17999999999999999,
+          0.12,
+          0.97999999999999998
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 0.98274383412559196,
+          "x": 0.051274150783155302,
+          "y": 0.098874130985660072,
+          "z": 0.14768014142540603
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.reflection_unique",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          3,
+          0,
+          0,
+          0,
+          2,
+          0,
+          0,
+          0,
+          -1
+        ]
+      },
+      "expect": {
+        "status": "ok",
+        "quaternion": {
+          "w": 1,
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.reflection_is_ambiguous",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          1,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          -1
+        ]
+      },
+      "expect": {
+        "status": "invalid_rotation_matrix"
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.rank_one_is_ambiguous",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "expect": {
+        "status": "invalid_rotation_matrix"
+      }
+    },
+    {
+      "id": "quat.nearest_from_matrix.zero_is_rejected",
+      "op": "quat_nearest_from_matrix",
+      "input": {
+        "matrix": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
         ]
       },
       "expect": {

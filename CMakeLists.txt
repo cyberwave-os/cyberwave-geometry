@@ -12,6 +12,11 @@
 # consumer back, not about what the sources need.
 cmake_minimum_required(VERSION 3.14)
 
+# 0.2.5: added quat::nearest_from_matrix (cw_geom_quat_nearest_from_matrix):
+#        the proper rotation nearest an arbitrary 3x3, the deliberately lenient
+#        counterpart of from_matrix for frames built from measured axes. Every
+#        existing call keeps its numerics.
+# 0.2.4: skipped -- open PR #4018 uses 0.2.4.
 # 0.2.3: the wheel is tagged py3-none-<platform> instead of once per CPython.
 #        Nothing in the package binds to the CPython ABI -- the core is loaded
 #        with ctypes -- so the interpreter tag only ever made the package
@@ -36,7 +41,7 @@ cmake_minimum_required(VERSION 3.14)
 # whenever numeric behaviour changes and the patch when the surface grows, so a
 # stale artifact -- a wheel or a Docker layer built before the change -- fails
 # on its version pin rather than at the call site with an AttributeError.
-project(CyberwaveGeometry VERSION 0.2.3 LANGUAGES CXX)
+project(CyberwaveGeometry VERSION 0.2.5 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

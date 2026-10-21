@@ -134,6 +134,17 @@ TEST(from_matrix_rejects_a_null_pointer_rather_than_dereferencing_it)
     CHECK(cw_geom_quat_from_matrix(nullptr, 1e-6, &out) == CW_GEOM_ERR_INVALID_ROTATION_MATRIX);
 }
 
+TEST(nearest_from_matrix_crosses_the_abi)
+{
+    const double flipped[9] = {2, 0, 0, 0, 2, 0, 0, 0, -2};
+    cw_geom_quat out;
+    CHECK(cw_geom_quat_nearest_from_matrix(flipped, &out) == CW_GEOM_ERR_INVALID_ROTATION_MATRIX);
+    const double scaled[9] = {0, -2, 0, 2, 0, 0, 0, 0, 2};
+    CHECK(cw_geom_quat_nearest_from_matrix(scaled, &out) == CW_GEOM_OK);
+    CHECK(cwtest::near(to_cpp(out), to_cpp(cw_geom_quat_from_yaw(kPi / 2)), 1e-12));
+    CHECK(cw_geom_quat_nearest_from_matrix(nullptr, &out) == CW_GEOM_ERR_INVALID_ROTATION_MATRIX);
+}
+
 TEST(transform_entry_points_agree_with_the_core)
 {
     cw_geom_transform parent = cw_geom_transform_identity();

@@ -260,7 +260,7 @@ val quat_to_matrix(val q)
     return out;
 }
 
-val quat_from_matrix(val components, double tolerance)
+Matrix3 matrix_from(val components)
 {
     Matrix3 matrix;
     const int length = components["length"].as<int>();
@@ -272,7 +272,17 @@ val quat_from_matrix(val components, double tolerance)
     {
         matrix.m[static_cast<std::size_t>(index)] = components[index].as<double>();
     }
-    return to_js(unwrap(quat::from_matrix(matrix, tolerance)));
+    return matrix;
+}
+
+val quat_from_matrix(val components, double tolerance)
+{
+    return to_js(unwrap(quat::from_matrix(matrix_from(components), tolerance)));
+}
+
+val quat_nearest_from_matrix(val components)
+{
+    return to_js(unwrap(quat::nearest_from_matrix(matrix_from(components))));
 }
 
 // --- transform --------------------------------------------------------------
@@ -451,6 +461,7 @@ EMSCRIPTEN_BINDINGS(cyberwave_geometry)
     emscripten::function("quatToYaw", &quat_to_yaw);
     emscripten::function("quatToMatrix", &quat_to_matrix);
     emscripten::function("quatFromMatrix", &quat_from_matrix);
+    emscripten::function("quatNearestFromMatrix", &quat_nearest_from_matrix);
 
     emscripten::function("transformNormalize", &transform_normalize);
     emscripten::function("transformCompose", &transform_compose);

@@ -9,7 +9,7 @@
 #         bash bindings/wasm/build.sh
 #     node bindings/wasm/tests/run_golden.mjs
 #
-# The golden runner replays all 269 cases of golden/geometry_golden.json through
+# The golden runner replays all 432 cases of golden/geometry_golden.json through
 # the build; it is what proves this artifact agrees with the C++ and Python ones.
 set -euo pipefail
 

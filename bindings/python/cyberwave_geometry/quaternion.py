@@ -23,6 +23,7 @@ __all__ = [
     "from_yaw",
     "inverse",
     "multiply",
+    "nearest_from_matrix",
     "nlerp",
     "norm",
     "normalize",
@@ -161,6 +162,13 @@ def to_yaw(q: Quaternion) -> float:
     return out.value
 
 
+def _matrix_buffer(matrix: Sequence[float]):
+    values = list(matrix)
+    if len(values) != 9:
+        raise ValueError(f"expected 9 matrix components, got {len(values)}")
+    return (c_double * 9)(*[float(value) for value in values])
+
+
 def to_matrix(q: Quaternion) -> tuple[float, ...]:
     """Row-major 3x3 rotation matrix as nine floats."""
     buffer = (c_double * 9)()
@@ -175,10 +183,22 @@ def from_matrix(matrix: Sequence[float], tolerance: float = 1e-6) -> Quaternion:
     ``tolerance``: a scaled or mirrored matrix reaching here is an upstream bug,
     not a rotation to be approximated.
     """
-    values = list(matrix)
-    if len(values) != 9:
-        raise ValueError(f"expected 9 matrix components, got {len(values)}")
-    buffer = (c_double * 9)(*[float(value) for value in values])
+    buffer = _matrix_buffer(matrix)
     out = CQuat()
     check(lib.cw_geom_quat_from_matrix(buffer, float(tolerance), byref(out)))
+    return _py(out)
+
+
+def nearest_from_matrix(matrix: Sequence[float]) -> Quaternion:
+    """The proper rotation closest to a row-major 3x3 in the Frobenius norm.
+
+    The lenient counterpart of :func:`from_matrix`, for a matrix that is only
+    approximately a rotation -- a frame built from measured axes, say. Scale,
+    skew and a reflection are projected away (the SVD projection
+    ``U @ diag(1, 1, det(U @ V.T)) @ V.T``). Raises :class:`GeometryError`
+    for a non-finite component or when the nearest rotation is not unique.
+    """
+    buffer = _matrix_buffer(matrix)
+    out = CQuat()
+    check(lib.cw_geom_quat_nearest_from_matrix(buffer, byref(out)))
     return _py(out)

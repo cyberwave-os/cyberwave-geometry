@@ -157,6 +157,11 @@ def _declare() -> None:
             [POINTER(c_double), c_double, POINTER(CQuat)],
             c_int32,
         ),
+        (
+            "cw_geom_quat_nearest_from_matrix",
+            [POINTER(c_double), POINTER(CQuat)],
+            c_int32,
+        ),
         # geodetic
         ("cw_geom_geo_validate", [CGeodetic], c_int32),
         ("cw_geom_geo_validate_anchor", [CGeoAnchor], c_int32),

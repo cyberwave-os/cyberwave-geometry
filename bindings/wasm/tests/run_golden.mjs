@@ -154,6 +154,8 @@ function run(testCase) {
       // The golden file carries no tolerance for this op, so pass the core's own
       // default (quaternion.hpp) rather than inventing a looser one here.
       return { quaternion: geom.quatFromMatrix(i.matrix, 1e-6) };
+    case "quat_nearest_from_matrix":
+      return { quaternion: geom.quatNearestFromMatrix(i.matrix) };
     case "quat_slerp":
       return { quaternion: geom.quatSlerp(i.a, i.b, i.t) };
     case "quat_nlerp":

@@ -2,7 +2,10 @@
 
 #include "cyberwave/geometry/vector.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <limits>
 
 namespace cyberwave
 {
@@ -461,6 +464,170 @@ Result<Quaternion> from_matrix(const Matrix3& m, double tolerance)
         out.x = (m.at(0, 2) + m.at(2, 0)) / s;
         out.y = (m.at(1, 2) + m.at(2, 1)) / s;
         out.z = 0.25 * s;
+    }
+    return normalize(out);
+}
+
+namespace
+{
+
+/// Cyclic Jacobi on a 4x4 symmetric matrix. On return `a` is diagonal (its
+/// eigenvalues) and the columns of `v` are the matching unit eigenvectors.
+void jacobi_eigen4(double (&a)[4][4], double (&v)[4][4])
+{
+    for (int i = 0; i < 4; ++i)
+    {
+        for (int j = 0; j < 4; ++j)
+        {
+            v[i][j] = i == j ? 1.0 : 0.0;
+        }
+    }
+    // Quadratic convergence takes a 4x4 to working precision in a handful of
+    // sweeps; the cap only bounds the loop.
+    constexpr int kMaxSweeps = 64;
+    for (int sweep = 0; sweep < kMaxSweeps; ++sweep)
+    {
+        bool rotated = false;
+        for (int p = 0; p < 3; ++p)
+        {
+            for (int q = p + 1; q < 4; ++q)
+            {
+                const double apq = a[p][q];
+                // Negligible against both diagonal entries: adding it changes
+                // neither in double precision, so zero it instead of rotating.
+                const double g = 100.0 * std::abs(apq);
+                if (std::abs(a[p][p]) + g == std::abs(a[p][p]) && std::abs(a[q][q]) + g == std::abs(a[q][q]))
+                {
+                    a[p][q] = 0.0;
+                    a[q][p] = 0.0;
+                    continue;
+                }
+                rotated = true;
+                const double theta = (a[q][q] - a[p][p]) / (2.0 * apq);
+                const double t = (theta >= 0.0 ? 1.0 : -1.0) / (std::abs(theta) + std::sqrt(theta * theta + 1.0));
+                const double c = 1.0 / std::sqrt(t * t + 1.0);
+                const double s = t * c;
+                for (int k = 0; k < 4; ++k)
+                {
+                    const double akp = a[k][p];
+                    const double akq = a[k][q];
+                    a[k][p] = c * akp - s * akq;
+                    a[k][q] = s * akp + c * akq;
+                }
+                for (int k = 0; k < 4; ++k)
+                {
+                    const double apk = a[p][k];
+                    const double aqk = a[q][k];
+                    a[p][k] = c * apk - s * aqk;
+                    a[q][k] = s * apk + c * aqk;
+                }
+                for (int k = 0; k < 4; ++k)
+                {
+                    const double vkp = v[k][p];
+                    const double vkq = v[k][q];
+                    v[k][p] = c * vkp - s * vkq;
+                    v[k][q] = s * vkp + c * vkq;
+                }
+            }
+        }
+        if (!rotated)
+        {
+            return;
+        }
+    }
+}
+
+} // namespace
+
+Result<Quaternion> nearest_from_matrix(const Matrix3& m)
+{
+    double scale = 0.0;
+    for (double component : m.m)
+    {
+        if (!std::isfinite(component))
+        {
+            return Result<Quaternion>::failure(ErrorCode::kNonFiniteValue, "", "matrix has a non-finite component");
+        }
+        scale = std::max(scale, std::abs(component));
+    }
+    if (scale == 0.0)
+    {
+        return Result<Quaternion>::failure(ErrorCode::kInvalidRotationMatrix, "",
+                                           "zero matrix has no nearest rotation");
+    }
+
+    // The nearest rotation is invariant under a positive scale; working on
+    // entries in [-1, 1] keeps the threshold absolute and rules out overflow.
+    Matrix3 n;
+    for (int i = 0; i < 9; ++i)
+    {
+        n.m[static_cast<std::size_t>(i)] = m.m[static_cast<std::size_t>(i)] / scale;
+    }
+
+    // Davenport's K for q = (x, y, z, w): q^T K q = trace(R(q)^T n) on unit q,
+    // so the eigenvector of the largest eigenvalue is the rotation maximizing
+    // trace(R^T n), i.e. minimizing |R - n| in the Frobenius norm.
+    const double trace = n.at(0, 0) + n.at(1, 1) + n.at(2, 2);
+    const double ax = n.at(2, 1) - n.at(1, 2);
+    const double ay = n.at(0, 2) - n.at(2, 0);
+    const double az = n.at(1, 0) - n.at(0, 1);
+    double k[4][4] = {
+        {2.0 * n.at(0, 0) - trace, n.at(0, 1) + n.at(1, 0), n.at(0, 2) + n.at(2, 0), ax},
+        {n.at(0, 1) + n.at(1, 0), 2.0 * n.at(1, 1) - trace, n.at(1, 2) + n.at(2, 1), ay},
+        {n.at(0, 2) + n.at(2, 0), n.at(1, 2) + n.at(2, 1), 2.0 * n.at(2, 2) - trace, az},
+        {ax, ay, az, trace},
+    };
+    double vectors[4][4];
+    jacobi_eigen4(k, vectors);
+
+    int best = 0;
+    for (int i = 1; i < 4; ++i)
+    {
+        if (k[i][i] > k[best][best])
+        {
+            best = i;
+        }
+    }
+    double runner_up = -std::numeric_limits<double>::infinity();
+    for (int i = 0; i < 4; ++i)
+    {
+        if (i != best)
+        {
+            runner_up = std::max(runner_up, k[i][i]);
+        }
+    }
+    // The gap is twice (s2 + sign(det) * s3) of the singular values, zero
+    // exactly when the projection has more than one answer.
+    if (k[best][best] - runner_up <= kMinNearestRotationGap)
+    {
+        return Result<Quaternion>::failure(ErrorCode::kInvalidRotationMatrix, "",
+                                           "matrix has no unique nearest rotation");
+    }
+
+    Quaternion out{.x = vectors[0][best], .y = vectors[1][best], .z = vectors[2][best], .w = vectors[3][best]};
+    // Same sign as from_matrix: Shepperd's pivot is positive. Its branch tests
+    // trace > 0, R00 > R11, R00 > R22 and R11 > R22, which on a unit quaternion
+    // are 4w^2 > 1, x^2 > y^2, x^2 > z^2 and y^2 > z^2.
+    double pivot = 0.0;
+    if (4.0 * out.w * out.w > 1.0)
+    {
+        pivot = out.w;
+    }
+    else if (out.x * out.x > out.y * out.y && out.x * out.x > out.z * out.z)
+    {
+        pivot = out.x;
+    }
+    else if (out.y * out.y > out.z * out.z)
+    {
+        pivot = out.y;
+    }
+    else
+    {
+        pivot = out.z;
+    }
+    if (pivot < 0.0)
+    {
+        out = Quaternion{.x = -out.x, .y = -out.y, .z = -out.z, .w = -out.w};
     }
     return normalize(out);
 }

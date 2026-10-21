@@ -127,6 +127,26 @@ Result<Matrix3> to_matrix(const Quaternion& q);
 /// a scaled or mirrored matrix reaching here is a bug upstream, not a rotation.
 Result<Quaternion> from_matrix(const Matrix3& m, double tolerance = 1e-6);
 
+/// Below this gap between the two largest eigenvalues of nearest_from_matrix's
+/// 4x4 system -- relative to the matrix's largest absolute entry -- the nearest
+/// rotation is not unique (a rank-deficient matrix, or a reflection whose two
+/// smallest singular values are equal, such as diag(1, 1, -1)).
+constexpr double kMinNearestRotationGap = 1e-12;
+
+/// The proper rotation closest to `m` in the Frobenius norm, for a matrix that
+/// is only approximately a rotation -- a frame assembled from measured axes
+/// that are not exactly orthogonal, say. The deliberately lenient counterpart
+/// of from_matrix: scale, skew and a reflection are all projected away rather
+/// than rejected, so call it only where that is the intent.
+///
+/// The same rotation as the SVD projection U * diag(1, 1, det(U V^T)) * V^T,
+/// computed as the dominant eigenvector of Davenport's 4x4 symmetric matrix.
+/// On a matrix that is already a rotation it agrees with from_matrix,
+/// including the sign. Rejects a non-finite component, and a matrix whose
+/// nearest rotation is not unique (see kMinNearestRotationGap), with
+/// kInvalidRotationMatrix rather than picking one of the candidates.
+Result<Quaternion> nearest_from_matrix(const Matrix3& m);
+
 } // namespace quat
 } // namespace geometry
 } // namespace cyberwave

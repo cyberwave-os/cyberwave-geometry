@@ -152,6 +152,21 @@ def test_from_matrix_rejects_a_scaled_matrix():
     assert caught.value.code is ErrorCode.INVALID_ROTATION_MATRIX
 
 
+def test_nearest_from_matrix_projects_what_from_matrix_rejects():
+    original = quat.from_rpy(0.1, 0.2, 0.3)
+    scaled = [component * 2.0 for component in quat.to_matrix(original)]
+    projected = quat.nearest_from_matrix(scaled)
+    assert projected.to_xyzw() == pytest.approx(original.to_xyzw(), abs=1e-12)
+
+
+def test_nearest_from_matrix_refuses_an_ambiguous_matrix():
+    with pytest.raises(ValueError, match="9 matrix components"):
+        quat.nearest_from_matrix([1, 0, 0, 0, 1, 0])
+    with pytest.raises(GeometryError) as caught:
+        quat.nearest_from_matrix([1, 0, 0, 0, 1, 0, 0, 0, -1])
+    assert caught.value.code is ErrorCode.INVALID_ROTATION_MATRIX
+
+
 # --- lenient adapters -------------------------------------------------------
 
 

@@ -9,7 +9,7 @@ docker run --rm -v "$PWD":/src -w /src emscripten/emsdk:3.1.64 \
 node bindings/wasm/tests/run_golden.mjs
 ```
 
-The runner replays all 269 cases of
+The runner replays all 432 cases of
 [`../../golden/geometry_golden.json`](../../golden/geometry_golden.json) — the
 same file the C++ and Python suites read — and currently passes every one at the
 file's `1e-12` tolerance. CI runs both steps in the `wasm` job of
@@ -22,7 +22,7 @@ else still fails a check.
 | ------------------------ | -------------------------------------------------------- |
 | `src/embind.cpp`         | embind surface over the core                              |
 | `build.sh`               | emcc invocation                                           |
-| `tests/run_golden.mjs`   | conformance runner, 269 cases / 1075 assertions           |
+| `tests/run_golden.mjs`   | conformance runner, 432 cases / 1594 assertions           |
 | `dist/`                  | build output, gitignored                                  |
 | `package.json`           | **missing**                                               |
 | TypeScript types         | **missing** — embind does not generate them               |

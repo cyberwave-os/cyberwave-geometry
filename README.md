@@ -138,8 +138,9 @@ not part of this repository's toolchain, so the build runs in the official
 
 ## Golden vectors
 
-[`golden/geometry_golden.json`](golden/geometry_golden.json) holds 420 cases
-covering quaternion algebra, every conversion path, slerp and nlerp (including
+[`golden/geometry_golden.json`](golden/geometry_golden.json) holds 432 cases
+covering quaternion algebra, every conversion path, the nearest-rotation
+projection, slerp and nlerp (including
 the antipodal and near-parallel branches), degenerate inputs, transform
 composition, geodetic conversion against four anchors (including a southern-
 hemisphere one and one on the antimeridian), and FK across five robot
@@ -169,14 +170,14 @@ Review the diff. A change you did not intend is the whole point of the file.
 
 | Suite | Cases | Covers |
 | ----- | ----: | ------ |
-| `test_quaternion` | 45 | algebra, every conversion path, slerp/nlerp, degenerate and non-finite input, all four Shepperd branches, both gimbal-lock poles and the band just outside them |
+| `test_quaternion` | 53 | algebra, every conversion path, slerp/nlerp, degenerate and non-finite input, all four Shepperd branches, both gimbal-lock poles and the band just outside them, the nearest-rotation projection and its ambiguous inputs |
 | `test_transform` | 15 | composition, associativity, inversion, the rotate-then-translate order, axis normalization |
 | `test_fk` | 39 | tree construction, base-frame resolution, chain resolution, origin-before-motion, mimic joints, and every structural failure mode |
 | `test_geodetic` | 23 | the ENU frame, the anchor heading, tangent-plane round trips, the antimeridian, compass and NED adapters, and the polar/out-of-range refusals |
-| `test_c_api` | 21 | handle lifetimes, null tolerance, and agreement with the C++ core |
-| `golden_vectors` | 420 | the shared conformance file |
-| Python `test_golden.py` | 420 | the same file, through the binding |
-| Python `test_binding.py` | 33 | handle lifetimes, the strict/lenient split, component-order discipline |
+| `test_c_api` | 22 | handle lifetimes, null tolerance, and agreement with the C++ core |
+| `golden_vectors` | 432 | the shared conformance file |
+| Python `test_golden.py` | 432 | the same file, through the binding |
+| Python `test_binding.py` | 38 | handle lifetimes, the strict/lenient split, component-order discipline |
 | Python `test_geodetic.py` | 24 | ABI field order, the wire spelling, and the strict/lenient split for coordinates |
 
 The C++ suites also pass under `-fsanitize=address,undefined` with leak

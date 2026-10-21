@@ -491,6 +491,23 @@ Json evaluate(const Json& robots, const std::string& op, const Json& input)
         out.set("quaternion", to_json(result.value()));
         return out;
     }
+    if (op == "quat_nearest_from_matrix")
+    {
+        Matrix3 matrix;
+        const Json& raw = input.get("matrix");
+        for (std::size_t index = 0; index < 9 && index < raw.size(); ++index)
+        {
+            matrix.m[index] = raw.at(index).as_number();
+        }
+        const auto result = quat::nearest_from_matrix(matrix);
+        if (!result)
+        {
+            return error_status(result.error().code);
+        }
+        Json out = ok_status();
+        out.set("quaternion", to_json(result.value()));
+        return out;
+    }
     if (op == "transform_normalize")
     {
         const auto result = tf::normalize(transform_from(input.get("t")));
@@ -895,6 +912,57 @@ void add_quaternion_cases(Json& cases, const Json& robots)
         Json mirrored_input = Json::object();
         mirrored_input.set("matrix", mirrored_json);
         add(cases, robots, "quat.from_matrix.mirrored_is_rejected", "quat_from_matrix", mirrored_input);
+    }
+
+    // nearest_from_matrix: the rotations from_matrix accepts (same answer, same
+    // sign), then what only the projection accepts, then the ambiguous inputs
+    // it has to reject.
+    struct NearestSample
+    {
+        std::string name;
+        std::vector<double> matrix;
+    };
+    std::vector<NearestSample> nearest_samples;
+    for (const NamedQuaternion& sample : matrix_samples)
+    {
+        const Matrix3 rotation = quat::to_matrix(sample.value).value();
+        std::vector<double> values(rotation.m.begin(), rotation.m.end());
+        nearest_samples.push_back({std::string("rotation_") + sample.name, values});
+    }
+    const Matrix3 general = quat::to_matrix(quat::from_rpy(0.1, 0.2, 0.3)).value();
+    std::vector<double> scaled(general.m.begin(), general.m.end());
+    for (double& component : scaled)
+    {
+        component *= 2.0;
+    }
+    nearest_samples.push_back({"scaled", scaled});
+    std::vector<double> mirrored(general.m.begin(), general.m.end());
+    for (int row = 0; row < 3; ++row)
+    {
+        mirrored[static_cast<std::size_t>(row * 3)] = -mirrored[static_cast<std::size_t>(row * 3)];
+    }
+    // Singular values (1, 1, 1) with det -1: every axis is equally far.
+    nearest_samples.push_back({"mirrored_is_ambiguous", mirrored});
+    // Unit x and y axes and a unit z leaning 0.3 rad towards x, the shape of a
+    // frame assembled from measured axes.
+    nearest_samples.push_back({"skewed_frame", {1, 0, std::sin(0.3), 0, 1, 0, 0, 0, std::cos(0.3)}});
+    nearest_samples.push_back({"perturbed", {0.93, -0.27, 0.21, 0.31, 0.95, -0.08, -0.18, 0.12, 0.98}});
+    // A reflection with distinct singular values (3, 2, 1) still has a unique
+    // nearest rotation: flip the smallest. Here that is the identity.
+    nearest_samples.push_back({"reflection_unique", {3, 0, 0, 0, 2, 0, 0, 0, -1}});
+    nearest_samples.push_back({"reflection_is_ambiguous", {1, 0, 0, 0, 1, 0, 0, 0, -1}});
+    nearest_samples.push_back({"rank_one_is_ambiguous", {1, 0, 0, 0, 0, 0, 0, 0, 0}});
+    nearest_samples.push_back({"zero_is_rejected", {0, 0, 0, 0, 0, 0, 0, 0, 0}});
+    for (const NearestSample& sample : nearest_samples)
+    {
+        Json matrix = Json::array();
+        for (double component : sample.matrix)
+        {
+            matrix.push_back(Json::number(component));
+        }
+        Json input = Json::object();
+        input.set("matrix", matrix);
+        add(cases, robots, "quat.nearest_from_matrix." + sample.name, "quat_nearest_from_matrix", input);
     }
 }
 
